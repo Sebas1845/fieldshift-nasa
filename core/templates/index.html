@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#0f172a" />
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>FieldShift NASA - Asesor Agrícola IA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+  </head>
+  <body class="bg-slate-950 text-slate-100 min-h-screen pb-24 font-sans">
+    <header
+      class="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-50 flex justify-between items-center"
+    >
+      <div>
+        <span
+          class="text-[10px] font-bold uppercase tracking-wider text-emerald-400"
+          >NASA Space Apps 2026</span
+        >
+        <h1 class="text-lg font-extrabold text-white">FieldShift AI 🛰️🌕</h1>
+      </div>
+      <div
+        id="badge-incendio"
+        class="px-3 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700"
+      >
+        🔥 Riesgo: Sin evaluar
+      </div>
+    </header>
+
+    <main class="max-w-md mx-auto p-4 space-y-4">
+      <!-- PESTAÑA 1: DIBUJO DE LOTE, TEMPORADA Y LUNA -->
+      <section id="tab-mapa" class="space-y-4">
+        <div
+          class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg space-y-3"
+        >
+          <div class="flex justify-between items-center">
+            <div>
+              <h2 class="text-sm font-bold text-emerald-400">
+                1. Dibuja el Polígono de tu Lote
+              </h2>
+              <p class="text-[11px] text-slate-400">
+                Toca 3 o más esquinas de tu terreno en el mapa satelital.
+              </p>
+            </div>
+            <button
+              onclick="limpiarLote()"
+              class="bg-slate-800 hover:bg-slate-700 text-xs px-3 py-1.5 rounded-lg border border-slate-600 text-slate-200"
+            >
+              🗑️ Reiniciar Lote
+            </button>
+          </div>
+
+          <div
+            id="map"
+            class="w-full h-64 rounded-xl border border-slate-700 z-10"
+          ></div>
+
+          <div class="grid grid-cols-3 gap-2 text-xs">
+            <div class="bg-slate-950 p-2 rounded-lg border border-slate-800">
+              <span class="text-slate-400 block text-[10px]"
+                >Área Calculada</span
+              >
+              <div class="flex items-baseline gap-1">
+                <input
+                  id="input-area"
+                  type="number"
+                  step="0.1"
+                  value="1.5"
+                  class="bg-transparent font-extrabold text-amber-400 w-12 focus:outline-none"
+                />
+                <span class="text-slate-400 text-[10px]">ha</span>
+              </div>
+            </div>
+            <div class="bg-slate-950 p-2 rounded-lg border border-slate-800">
+              <span class="text-slate-400 block text-[10px]"
+                >Pendiente Real</span
+              >
+              <div class="flex items-baseline gap-1">
+                <input
+                  id="input-inclinacion"
+                  type="number"
+                  value="14"
+                  class="bg-transparent font-extrabold text-emerald-400 w-10 focus:outline-none"
+                />
+                <span class="text-slate-400 text-[10px]">%</span>
+              </div>
+            </div>
+            <div class="bg-slate-950 p-2 rounded-lg border border-slate-800">
+              <span class="text-slate-400 block text-[10px]"
+                >Centro del Lote</span
+              >
+              <span
+                id="label-coords"
+                class="font-bold text-white text-[11px] block truncate"
+                >2.927, -75.281</span
+              >
+              <input id="input-lat" type="hidden" value="2.9273" />
+              <input id="input-lon" type="hidden" value="-75.2819" />
+            </div>
+          </div>
+
+          <div>
+            <label class="text-xs text-slate-400 block mb-1"
+              >📅 Temporada Climática a Planificar</label
+            >
+            <select
+              id="select-temporada"
+              class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-semibold"
+            >
+              <option value="Actual (Tiempo Real + Fase Lunar Hoy)">
+                ⚡ Temporada Actual (Tiempo Real + Luna Hoy)
+              </option>
+              <option value="Temporada Seca / Verano (Ahorro Hídrico)">
+                ☀️ Próxima Temporada Seca / Verano (Ahorro Hídrico)
+              </option>
+              <option
+                value="Temporada de Lluvias / Invierno (Control de Erosión)"
+              >
+                🌧️ Próxima Temporada de Lluvias (Control de Erosión)
+              </option>
+              <option value="Transición / Rotación Semestral">
+                🌾 Transición / Rotación Semestral
+              </option>
+            </select>
+          </div>
+
+          <button
+            onclick="consultarTerreno()"
+            id="btn-terreno"
+            class="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold py-3 rounded-xl transition shadow-lg"
+          >
+            🛰️ Analizar Lote, Clima NASA y Luna
+          </button>
+        </div>
+
+        <div id="resultado-terreno" class="hidden space-y-3">
+          <div
+            class="bg-indigo-950/50 border border-indigo-500/40 rounded-2xl p-3.5 flex items-center justify-between"
+          >
+            <div>
+              <span
+                class="text-[10px] uppercase font-bold text-indigo-300 tracking-wider"
+                >Fase Lunar Agrícola</span
+              >
+              <h3
+                id="val-luna-fase"
+                class="text-base font-extrabold text-white"
+              >
+                🌕 --
+              </h3>
+              <p id="val-luna-savia" class="text-xs text-indigo-200 mt-0.5"></p>
+            </div>
+            <div class="text-right">
+              <span
+                id="val-luna-ilum"
+                class="text-lg font-black text-indigo-300"
+                >--%</span
+              >
+              <span class="block text-[10px] text-indigo-400">Iluminación</span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-4 gap-2 text-center">
+            <div class="bg-slate-900 p-2.5 rounded-xl border border-slate-800">
+              <span class="text-[10px] text-slate-400">Temp.</span>
+              <p id="val-temp" class="text-sm font-extrabold text-amber-400">
+                -- °C
+              </p>
+            </div>
+            <div class="bg-slate-900 p-2.5 rounded-xl border border-slate-800">
+              <span class="text-[10px] text-slate-400">Hum. Raíz</span>
+              <p id="val-humedad" class="text-sm font-extrabold text-sky-400">
+                -- %
+              </p>
+            </div>
+            <div class="bg-slate-900 p-2.5 rounded-xl border border-slate-800">
+              <span class="text-[10px] text-slate-400">Lluvia</span>
+              <p id="val-lluvia" class="text-sm font-extrabold text-indigo-400">
+                -- mm
+              </p>
+            </div>
+            <div class="bg-slate-900 p-2.5 rounded-xl border border-slate-800">
+              <span class="text-[10px] text-slate-400">Sol NASA</span>
+              <p id="val-sol" class="text-sm font-extrabold text-yellow-400">
+                --
+              </p>
+            </div>
+          </div>
+
+          <div
+            class="bg-slate-900 border border-emerald-500/30 rounded-2xl p-4 space-y-2.5 text-sm"
+          >
+            <h3 class="font-bold text-emerald-400">
+              🌱 Plan Maestro para tu Lote (IA)
+            </h3>
+            <p>
+              <strong class="text-slate-300">Ciclo 1:</strong>
+              <span id="ia-ciclo1" class="text-slate-100"></span>
+            </p>
+            <p>
+              <strong class="text-slate-300">Ciclo 2 (Rotación):</strong>
+              <span id="ia-ciclo2" class="text-slate-100"></span>
+            </p>
+            <div class="pt-2 border-t border-slate-800">
+              <strong class="text-indigo-400 block text-xs uppercase"
+                >🌙 Labor Lunar de la Semana:</strong
+              >
+              <p id="ia-luna-tarea" class="text-xs text-slate-200 mt-1"></p>
+            </div>
+            <div class="pt-2 border-t border-slate-800">
+              <strong class="text-amber-400 block text-xs uppercase"
+                >🔥 Escudo Climático e Incendios:</strong
+              >
+              <p id="ia-accion" class="text-xs text-slate-300 mt-1"></p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PESTAÑA 2: ESCÁNER FOLIAR CON CÁMARA -->
+      <section id="tab-escaner" class="hidden space-y-4">
+        <div
+          class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg space-y-3"
+        >
+          <h2 class="text-sm font-bold text-emerald-400">
+            2. Diagnóstico Foliar con Visión IA
+          </h2>
+          <p class="text-xs text-slate-400">
+            Toma una foto a una hoja de tu cultivo para detectar deficiencias y
+            sincronizar el tratamiento con la fase lunar.
+          </p>
+
+          <div>
+            <label class="text-xs text-slate-400 block mb-1"
+              >Cultivo actual</label
+            >
+            <select
+              id="select-cultivo"
+              class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-sm text-white"
+            >
+              <option value="Café">Café</option>
+              <option value="Maíz">Maíz</option>
+              <option value="Cacao">Cacao</option>
+              <option value="Frijol">Frijol</option>
+              <option value="Arroz">Arroz</option>
+              <option value="Plátano">Plátano</option>
+            </select>
+          </div>
+
+          <label
+            class="flex flex-col items-center justify-center border-2 border-dashed border-slate-700 rounded-xl p-6 cursor-pointer hover:border-emerald-400 transition"
+          >
+            <span class="text-2xl mb-1">📷</span>
+            <span class="text-xs text-slate-300 font-medium"
+              >Tomar foto de la hoja o subir imagen</span
+            >
+            <input
+              id="input-foto"
+              type="file"
+              accept="image/*"
+              capture="environment"
+              class="hidden"
+              onchange="previsualizarFoto(event)"
+            />
+          </label>
+
+          <img
+            id="preview-img"
+            class="hidden w-full h-44 object-cover rounded-xl border border-slate-700"
+          />
+
+          <button
+            onclick="escanearHoja()"
+            id="btn-hoja"
+            class="w-full bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold py-3 rounded-xl transition"
+          >
+            🔍 Diagnosticar Hoja con IA
+          </button>
+        </div>
+
+        <div
+          id="resultado-hoja"
+          class="hidden bg-slate-900 border border-sky-500/30 rounded-2xl p-4 space-y-2 text-sm"
+        >
+          <h3 class="font-bold text-sky-400">
+            🔬 Diagnóstico Nutricional + Lunar
+          </h3>
+          <p>
+            <strong class="text-slate-300">Estado:</strong>
+            <span id="hoja-estado"></span>
+          </p>
+          <p>
+            <strong class="text-slate-300">Nutriente faltante:</strong>
+            <span
+              id="hoja-nutriente"
+              class="text-amber-400 font-semibold"
+            ></span>
+          </p>
+          <p>
+            <strong class="text-slate-300">Tratamiento hoy:</strong>
+            <span id="hoja-tratamiento"></span>
+          </p>
+          <div class="pt-2 border-t border-slate-800">
+            <strong class="text-emerald-400 block text-xs uppercase"
+              >Rotación para recuperar el suelo:</strong
+            >
+            <p id="hoja-rotacion" class="text-xs text-slate-200 mt-1"></p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <nav
+      class="fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 flex justify-around py-3 z-50 max-w-md mx-auto"
+    >
+      <button
+        onclick="cambiarTab('mapa')"
+        id="nav-mapa"
+        class="text-emerald-400 font-bold text-xs flex flex-col items-center"
+      >
+        <span>🛰️</span>
+        <span>Lote + Luna</span>
+      </button>
+      <button
+        onclick="cambiarTab('escaner')"
+        id="nav-escaner"
+        class="text-slate-400 font-bold text-xs flex flex-col items-center"
+      >
+        <span>🍃</span>
+        <span>Escáner Foliar</span>
+      </button>
+    </nav>
+
+    <script>
+      const map = L.map("map").setView([2.9273, -75.2819], 15);
+      L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        {
+          maxZoom: 19,
+          attribution: "Esri Satellite",
+        },
+      ).addTo(map);
+
+      let puntosLote = [];
+      let marcadores = [];
+      let poligono = L.polygon([], {
+        color: "#10b981",
+        fillColor: "#10b981",
+        fillOpacity: 0.35,
+        weight: 3,
+      }).addTo(map);
+
+      function limpiarLote() {
+        puntosLote = [];
+        marcadores.forEach((m) => map.removeLayer(m));
+        marcadores = [];
+        poligono.setLatLngs([]);
+        document.getElementById("input-area").value = "0.0";
+      }
+
+      map.on("click", async function (e) {
+        const { lat, lng } = e.latlng;
+        puntosLote.push([lat, lng]);
+
+        const puntoIcon = L.circleMarker([lat, lng], {
+          radius: 5,
+          color: "#fbbf24",
+          fillColor: "#f59e0b",
+          fillOpacity: 1,
+        }).addTo(map);
+        marcadores.push(puntoIcon);
+        poligono.setLatLngs(puntosLote);
+
+        const center = poligono.getBounds().getCenter();
+        document.getElementById("input-lat").value = center.lat.toFixed(4);
+        document.getElementById("input-lon").value = center.lng.toFixed(4);
+        document.getElementById("label-coords").innerText =
+          `${center.lat.toFixed(3)}, ${center.lng.toFixed(3)}`;
+
+        if (puntosLote.length >= 3) {
+          const coordsTurf = puntosLote.map((p) => [p[1], p[0]]);
+          coordsTurf.push(coordsTurf[0]);
+          const polyTurf = turf.polygon([coordsTurf]);
+          const areaMetros = turf.area(polyTurf);
+          const areaHectareas = Math.max((areaMetros / 10000).toFixed(2), 0.1);
+          document.getElementById("input-area").value = areaHectareas;
+
+          try {
+            const lats = puntosLote.map((p) => p[0].toFixed(4)).join(",");
+            const lons = puntosLote.map((p) => p[1].toFixed(4)).join(",");
+            const res = await fetch(
+              `https://api.open-meteo.com/v1/elevation?latitude=${lats}&longitude=${lons}`,
+            );
+            const data = await res.json();
+            if (data.elevation && data.elevation.length >= 2) {
+              const maxElev = Math.max(...data.elevation);
+              const minElev = Math.min(...data.elevation);
+              const distanciaAprox = Math.sqrt(areaMetros) || 100;
+              const pendiente = Math.min(
+                Math.round(((maxElev - minElev) / distanciaAprox) * 100),
+                75,
+              );
+              document.getElementById("input-inclinacion").value = pendiente;
+            }
+          } catch (err) {
+            console.log(err);
+          }
+        }
+      });
+
+      function cambiarTab(tab) {
+        document
+          .getElementById("tab-mapa")
+          .classList.toggle("hidden", tab !== "mapa");
+        document
+          .getElementById("tab-escaner")
+          .classList.toggle("hidden", tab !== "escaner");
+        document.getElementById("nav-mapa").className =
+          tab === "mapa"
+            ? "text-emerald-400 font-bold text-xs flex flex-col items-center"
+            : "text-slate-400 font-bold text-xs flex flex-col items-center";
+        document.getElementById("nav-escaner").className =
+          tab === "escaner"
+            ? "text-sky-400 font-bold text-xs flex flex-col items-center"
+            : "text-slate-400 font-bold text-xs flex flex-col items-center";
+      }
+
+      async function consultarTerreno() {
+        const btn = document.getElementById("btn-terreno");
+        btn.innerText = "⏳ Cruzando Lote, Satélite NASA y Luna...";
+        btn.disabled = true;
+
+        const lat = document.getElementById("input-lat").value;
+        const lon = document.getElementById("input-lon").value;
+        const inc = document.getElementById("input-inclinacion").value;
+        const area = document.getElementById("input-area").value;
+        const temp = encodeURIComponent(
+          document.getElementById("select-temporada").value,
+        );
+
+        try {
+          const res = await fetch(
+            `/api/analizar-terreno/?lat=${lat}&lon=${lon}&inclinacion=${inc}&area_ha=${area}&temporada=${temp}`,
+          );
+          if (!res.ok) throw new Error("Error HTTP " + res.status);
+          const data = await res.json();
+
+          document.getElementById("val-luna-fase").innerText = data.luna.fase;
+          document.getElementById("val-luna-savia").innerText =
+            data.luna.actividad_savia;
+          document.getElementById("val-luna-ilum").innerText =
+            data.luna.iluminacion_pct + "%";
+
+          document.getElementById("val-temp").innerText =
+            data.telemetria_nasa.temperatura_c + " °C";
+          document.getElementById("val-humedad").innerText =
+            data.telemetria_nasa.humedad_raiz_pct + " %";
+          document.getElementById("val-lluvia").innerText =
+            data.telemetria_nasa.lluvia_mm_dia + " mm";
+          document.getElementById("val-sol").innerText =
+            data.telemetria_nasa.radiacion_solar;
+
+          const badge = document.getElementById("badge-incendio");
+          if (data.telemetria_nasa.riesgo_incendio === "ALTO") {
+            badge.innerText = "🔥 Riesgo: ALTO";
+            badge.className =
+              "px-3 py-1 rounded-full text-xs font-bold bg-red-950 text-red-400 border border-red-500 animate-pulse";
+          } else {
+            badge.innerText = "✅ Riesgo: BAJO";
+            badge.className =
+              "px-3 py-1 rounded-full text-xs font-bold bg-emerald-950 text-emerald-400 border border-emerald-500";
+          }
+
+          document.getElementById("ia-ciclo1").innerText =
+            data.asesoria_ia.ciclo_1;
+          document.getElementById("ia-ciclo2").innerText =
+            data.asesoria_ia.ciclo_2_rotacion;
+          document.getElementById("ia-luna-tarea").innerText =
+            data.asesoria_ia.calendario_lunar_tareas;
+          document.getElementById("ia-accion").innerText =
+            data.asesoria_ia.accion_preventiva;
+          document
+            .getElementById("resultado-terreno")
+            .classList.remove("hidden");
+        } catch (e) {
+          alert("Error de conexión local: " + e.message);
+        } finally {
+          btn.innerText = "🛰️ Analizar Lote, Clima NASA y Luna";
+          btn.disabled = false;
+        }
+      }
+
+      function previsualizarFoto(event) {
+        const file = event.target.files[0];
+        if (file) {
+          const img = document.getElementById("preview-img");
+          img.src = URL.createObjectURL(file);
+          img.classList.remove("hidden");
+        }
+      }
+
+      async function escanearHoja() {
+        const fileInput = document.getElementById("input-foto");
+        if (!fileInput.files.length)
+          return alert("Primero selecciona o toma una foto de una hoja.");
+
+        const btn = document.getElementById("btn-hoja");
+        btn.innerText = "🔬 Analizando hoja con IA...";
+        btn.disabled = true;
+
+        const formData = new FormData();
+        formData.append(
+          "cultivo",
+          document.getElementById("select-cultivo").value,
+        );
+        formData.append("foto", fileInput.files[0]);
+
+        try {
+          const res = await fetch("/api/escanear-hoja/", {
+            method: "POST",
+            body: formData,
+          });
+          const data = await res.json();
+
+          document.getElementById("hoja-estado").innerText =
+            data.diagnostico_ia.estado_salud;
+          document.getElementById("hoja-nutriente").innerText =
+            data.diagnostico_ia.nutriente_faltante;
+          document.getElementById("hoja-tratamiento").innerText =
+            data.diagnostico_ia.tratamiento_inmediato;
+          document.getElementById("hoja-rotacion").innerText =
+            data.diagnostico_ia.cultivo_rotacion_sugerido;
+          document.getElementById("resultado-hoja").classList.remove("hidden");
+        } catch (e) {
+          alert("Error analizando la imagen.");
+        } finally {
+          btn.innerText = "🔍 Diagnosticar Hoja con IA";
+          btn.disabled = false;
+        }
+      }
+    </script>
+  </body>
+</html>
