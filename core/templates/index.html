@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Orbital | GeoSync FieldShift</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        :root {
+            --nasa-black: #05070e;
+            --nasa-panel: rgba(13, 19, 38, 0.84);
+            --nasa-blue: #0b3d91;
+            --nasa-red: #fc3d21;
+            --nasa-cyan: #00e5ff;
+            --nasa-green: #10b981;
+            --nasa-amber: #f59e0b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border-glow: rgba(255, 255, 255, 0.14);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--nasa-black) url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=2000&q=85') center/cover fixed;
+            color: var(--text-main);
+            min-height: 100vh;
+        }
+        body::before {
+            content: ""; position: fixed; inset: 0;
+            background: linear-gradient(180deg, rgba(5,7,14,0.8) 0%, rgba(5,7,14,0.95) 100%);
+            z-index: -1;
+        }
+
+        /* =========================================================
+           LOADER GLOBAL BIOTECH: PLANTA GERMINANDO Y CRECIENDO
+           ========================================================= */
+        #geosync-loader {
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(circle at center, rgba(13, 25, 48, 0.94) 0%, rgba(5, 7, 14, 0.98) 100%);
+            backdrop-filter: blur(18px);
+            z-index: 99999;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.35s ease;
+        }
+        #geosync-loader.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+        .loader-orbit-box {
+            position: relative;
+            width: 180px;
+            height: 180px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: radial-gradient(circle, rgba(16, 185, 129, 0.12) 0%, transparent 70%);
+            border-radius: 50%;
+        }
+        .orbit-ring {
+            position: absolute;
+            inset: 0;
+            border: 2px dashed rgba(0, 229, 255, 0.4);
+            border-top: 3px solid var(--nasa-cyan);
+            border-bottom: 3px solid var(--nasa-green);
+            border-radius: 50%;
+            animation: spinOrbit 3.2s linear infinite;
+            box-shadow: 0 0 25px rgba(0, 229, 255, 0.2);
+        }
+        .orbit-ring-inner {
+            position: absolute;
+            inset: 16px;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            border-left: 2px solid var(--nasa-green);
+            border-radius: 50%;
+            animation: spinOrbitReverse 2.2s linear infinite;
+        }
+        .plant-svg {
+            width: 115px;
+            height: 115px;
+            overflow: visible;
+            filter: drop-shadow(0 0 14px rgba(16, 185, 129, 0.65));
+        }
+        .soil-line {
+            stroke: var(--nasa-cyan);
+            stroke-width: 3.5;
+            stroke-linecap: round;
+            animation: pulseSoil 1.8s ease-in-out infinite;
+        }
+        .root-path {
+            stroke: rgba(0, 229, 255, 0.55);
+            stroke-width: 2;
+            stroke-linecap: round;
+            fill: none;
+            stroke-dasharray: 30;
+            stroke-dashoffset: 30;
+            animation: growStem 1.8s ease-in-out infinite;
+        }
+        .stem-path {
+            stroke: #10b981;
+            stroke-width: 4.5;
+            stroke-linecap: round;
+            fill: none;
+            stroke-dasharray: 75;
+            stroke-dashoffset: 75;
+            animation: growStem 1.8s ease-in-out infinite;
+        }
+        .leaf-left, .leaf-right, .leaf-top {
+            fill: url(#leafGrad);
+            transform-box: fill-box;
+        }
+        .leaf-left {
+            transform-origin: right bottom;
+            animation: unfoldLeft 1.8s ease-in-out infinite;
+        }
+        .leaf-right {
+            transform-origin: left bottom;
+            animation: unfoldRight 1.8s ease-in-out infinite;
+        }
+        .leaf-top {
+            transform-origin: bottom center;
+            animation: unfoldTop 1.8s ease-in-out infinite;
+        }
+        .loader-title {
+            margin-top: 26px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            color: #ffffff;
+            text-shadow: 0 0 15px rgba(0, 229, 255, 0.4);
+        }
+        .loader-sub {
+            margin-top: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12.5px;
+            color: var(--nasa-cyan);
+        }
+        .loader-bar-wrap {
+            width: 240px;
+            height: 4px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            margin-top: 16px;
+            overflow: hidden;
+        }
+        .loader-bar-fill {
+            width: 45%;
+            height: 100%;
+            background: linear-gradient(90deg, var(--nasa-cyan), var(--nasa-green));
+            border-radius: 10px;
+            animation: slideBar 1.3s ease-in-out infinite alternate;
+        }
+        @keyframes spinOrbit { to { transform: rotate(360deg); } }
+        @keyframes spinOrbitReverse { to { transform: rotate(-360deg); } }
+        @keyframes slideBar {
+            0% { transform: translateX(-20%); width: 35%; }
+            100% { transform: translateX(160%); width: 55%; }
+        }
+        @keyframes pulseSoil { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+        @keyframes growStem {
+            0% { stroke-dashoffset: 75; }
+            40%, 85% { stroke-dashoffset: 0; }
+            100% { stroke-dashoffset: 75; }
+        }
+        @keyframes unfoldLeft {
+            0%, 22% { transform: scale(0) rotate(-35deg); opacity: 0; }
+            55%, 85% { transform: scale(1) rotate(0deg); opacity: 1; }
+            100% { transform: scale(0); opacity: 0; }
+        }
+        @keyframes unfoldRight {
+            0%, 32% { transform: scale(0) rotate(35deg); opacity: 0; }
+            65%, 85% { transform: scale(1) rotate(0deg); opacity: 1; }
+            100% { transform: scale(0); opacity: 0; }
+        }
+        @keyframes unfoldTop {
+            0%, 45% { transform: scale(0); opacity: 0; }
+            75%, 88% { transform: scale(1.12); opacity: 1; }
+            100% { transform: scale(0); opacity: 0; }
+        }
+
+        /* NOTIFICACIÓN TOAST FLOTANTE */
+        #nasa-toast {
+            position: fixed;
+            bottom: 28px;
+            right: 28px;
+            background: rgba(13, 19, 38, 0.95);
+            border: 1px solid var(--nasa-cyan);
+            border-left: 4px solid var(--nasa-green);
+            color: #fff;
+            padding: 14px 20px;
+            border-radius: 10px;
+            font-size: 13.5px;
+            box-shadow: 0 12px 30px rgba(0,0,0,0.6);
+            z-index: 9999;
+            transform: translateY(120px);
+            opacity: 0;
+            transition: 0.3s ease;
+        }
+        #nasa-toast.show { transform: translateY(0); opacity: 1; }
+
+        /* ESTILOS GENERALES DEL PANEL */
+        .nasa-navbar {
+            background: rgba(5, 7, 14, 0.9); backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--border-glow); padding: 14px 32px;
+            display: flex; justify-content: space-between; align-items: center;
+            position: sticky; top: 0; z-index: 1000; flex-wrap: wrap; gap: 12px;
+        }
+        .brand-wrap { display: flex; align-items: center; gap: 16px; }
+        .nasa-badge {
+            background: var(--nasa-blue); color: #fff; font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700; letter-spacing: 1.5px; padding: 6px 12px; border-radius: 6px;
+            border-left: 4px solid var(--nasa-cyan); font-size: 12px;
+        }
+        .telemetry-status {
+            display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+            font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-muted);
+        }
+        .btn-logout {
+            background: rgba(252, 61, 33, 0.18); color: #ff6b52;
+            border: 1px solid rgba(252, 61, 33, 0.45); padding: 7px 14px;
+            border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: 600;
+            transition: 0.2s;
+        }
+        .btn-logout:hover { background: var(--nasa-red); color: #fff; }
+        .btn-login-nav {
+            background: rgba(16, 185, 129, 0.18); color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.45); padding: 7px 14px;
+            border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: 600;
+            transition: 0.2s;
+        }
+        .btn-login-nav:hover { background: var(--nasa-green); color: #05070e; }
+        .guest-pill {
+            background: rgba(245, 158, 11, 0.16); color: #fcd34d;
+            border: 1px solid rgba(245, 158, 11, 0.45); padding: 5px 10px;
+            border-radius: 6px; font-size: 11px;
+        }
+        .container { max-width: 1320px; margin: 28px auto; padding: 0 24px; }
+        .mission-nav { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+        .nav-pill {
+            background: var(--nasa-panel); color: var(--text-muted);
+            border: 1px solid var(--border-glow); padding: 12px 20px;
+            border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 14px;
+            display: flex; align-items: center; gap: 10px; transition: 0.2s;
+        }
+        .nav-pill.active {
+            background: var(--nasa-blue); color: #fff; border-color: var(--nasa-cyan);
+            box-shadow: 0 0 20px rgba(0, 229, 255, 0.25);
+        }
+        .glass-card {
+            background: var(--nasa-panel); backdrop-filter: blur(20px);
+            border: 1px solid var(--border-glow); border-radius: 16px; padding: 26px;
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+        }
+        .dashboard-grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 24px; }
+        @media (max-width: 960px) { .dashboard-grid { grid-template-columns: 1fr; } }
+        #map { height: 440px; width: 100%; border-radius: 12px; border: 1px solid rgba(0, 229, 255, 0.35); margin: 14px 0; }
+        .telemetry-bar {
+            display: flex; justify-content: space-between; align-items: center;
+            background: rgba(0, 0, 0, 0.5); padding: 10px 16px; border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--nasa-cyan);
+            margin-bottom: 14px; border-left: 3px solid var(--nasa-cyan);
+        }
+        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(115px, 1fr)); gap: 10px; margin-bottom: 16px; }
+        .metric-box { background: rgba(5, 7, 14, 0.65); border: 1px solid var(--border-glow); padding: 12px; border-radius: 10px; }
+        .metric-box small { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-muted); display: block; }
+        .metric-box strong { font-family: 'Space Grotesk', sans-serif; font-size: 17px; color: var(--nasa-cyan); }
+        .btn-nasa {
+            width: 100%; background: linear-gradient(135deg, var(--nasa-blue) 0%, #1a56db 100%);
+            color: #fff; border: 1px solid rgba(255,255,255,0.2); padding: 14px;
+            border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s;
+        }
+        .btn-nasa:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(11, 61, 145, 0.6); }
+        .btn-nasa:disabled { opacity: 0.45; cursor: not-allowed; }
+        .btn-red { background: linear-gradient(135deg, var(--nasa-red) 0%, #d9260f 100%); }
+        .crop-card { background: rgba(5, 7, 14, 0.75); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 18px; margin-top: 14px; }
+        .step-box { background: rgba(11, 61, 145, 0.2); border-left: 3px solid var(--nasa-cyan); padding: 10px 14px; margin-top: 8px; border-radius: 4px; font-size: 13px; }
+        .upload-zone { border: 2px dashed rgba(0, 229, 255, 0.4); background: rgba(5, 7, 14, 0.5); border-radius: 12px; padding: 28px; text-align: center; cursor: pointer; margin: 16px 0; display: block; transition: 0.2s; }
+        .upload-zone:hover { border-color: var(--nasa-cyan); background: rgba(0, 229, 255, 0.05); }
+        #preview-hoja { max-height: 210px; border-radius: 10px; margin-top: 12px; border: 1px solid var(--nasa-cyan); }
+        .alert-error { background: rgba(252, 61, 33, 0.18); border: 1px solid var(--nasa-red); color: #ffb4a8; padding: 14px; border-radius: 10px; }
+        .alert-success { background: rgba(16, 185, 129, 0.16); border: 1px solid var(--nasa-green); color: #d1fae5; padding: 14px; border-radius: 10px; }
+        .engine-banner {
+            margin-bottom: 14px; padding: 10px 14px; border-radius: 8px;
+            background: rgba(0, 0, 0, 0.55); font-family: 'JetBrains Mono', monospace; font-size: 12px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .input-dark {
+            width: 100%; padding: 12px; background: #05070e; color: #fff;
+            border: 1px solid rgba(255,255,255,0.18); border-radius: 8px; margin-top: 6px; margin-bottom: 14px;
+        }
+        .ai-footer {
+            max-width: 1320px; margin: 20px auto 35px; padding: 14px 24px;
+            text-align: center; font-size: 12px; color: var(--text-muted);
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<!-- LOADER GLOBAL: PLANTA CRECIENDO -->
+<div id="geosync-loader">
+    <div class="loader-orbit-box">
+        <div class="orbit-ring"></div>
+        <div class="orbit-ring-inner"></div>
+        <svg class="plant-svg" viewBox="0 0 100 100">
+            <defs>
+                <linearGradient id="leafGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#00e5ff" />
+                    <stop offset="100%" stop-color="#10b981" />
+                </linearGradient>
+            </defs>
+            <line class="soil-line" x1="22" y1="80" x2="78" y2="80" />
+            <path class="root-path" d="M50 80 Q44 88 36 92 M50 80 Q56 88 64 92 M50 80 L50 95" />
+            <path class="stem-path" d="M50 80 Q49 54 50 26" />
+            <path class="leaf-left" d="M50 62 C28 60 20 44 31 36 C42 36 48 50 50 62 Z" />
+            <path class="leaf-right" d="M50 49 C72 47 80 31 69 23 C58 23 52 37 50 49 Z" />
+            <path class="leaf-top" d="M50 28 C41 14 50 4 50 4 C50 4 59 14 50 28 Z" />
+        </svg>
+    </div>
+    <div class="loader-title" id="loader-titulo">GERMINANDO TELEMETRÍA...</div>
+    <div class="loader-sub" id="loader-subtitulo">Sincronizando datos abiertos satelitales & IA</div>
+    <div class="loader-bar-wrap"><div class="loader-bar-fill"></div></div>
+</div>
+
+<!-- NOTIFICACIÓN TOAST -->
+<div id="nasa-toast"></div>
+
+<nav class="nasa-navbar">
+    <div class="brand-wrap">
+        <div class="nasa-badge"><i class="fa-solid fa-satellite"></i> GEOSYNC // TELEMETRÍA ORBITAL</div>
+        <div>
+            <h1 style="font-family:'Space Grotesk',sans-serif; font-size:20px;">GeoSync FieldShift</h1>
+            <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--nasa-cyan);">
+                IMPULSADO POR DATOS ABIERTOS DE LA NASA (POWER · SMAP · GPM · SRTM) & IA SINTÉTICA
+            </span>
+        </div>
+    </div>
+    <div class="telemetry-status">
+        <!-- TRADUCTOR ESPAÑOL <-> INGLÉS -->
+        <div id="google_translate_element"></div>
+
+        {% if es_invitado %}
+            <span class="guest-pill">
+                <i class="fa-solid fa-user-secret"></i> MODO INVITADO / DEMO PÚBLICA (SIN HISTORIAL)
+            </span>
+            <a href="{% url 'acceso' %}" class="btn-login-nav">
+                <i class="fa-solid fa-right-to-bracket"></i> Iniciar Sesión / Crear Cuenta
+            </a>
+        {% else %}
+            <span>
+                <i class="fa-solid fa-user-astronaut" style="color:var(--nasa-cyan);"></i> OPERADOR: {{ user.username|upper }}
+            </span>
+            <a href="{% url 'logout' %}" class="btn-logout">
+                <i class="fa-solid fa-power-off"></i> Cerrar Sesión
+            </a>
+        {% endif %}
+    </div>
+</nav>
+
+<div class="container">
+    <div class="mission-nav">
+        <button class="nav-pill active" onclick="mostrarTab('tab-mapa', this)">
+            <i class="fa-solid fa-earth-americas"></i> 1. Mapa Satelital y Plan de Siembra
+        </button>
+        <button class="nav-pill" onclick="mostrarTab('tab-escaner', this)">
+            <i class="fa-solid fa-microscope"></i> 2. Escáner Universal de Plantas e IA
+        </button>
+
+        {% if not es_invitado %}
+        <button class="nav-pill" onclick="mostrarTab('tab-historial', this); cargarHistorial();">
+            <i class="fa-solid fa-database"></i> 3. Mi Historial y Planes Activos
+        </button>
+        {% endif %}
+
+        <button class="nav-pill" onclick="mostrarTab('tab-comunidad', this); cargarComentarios();">
+            <i class="fa-solid fa-comments"></i> {% if es_invitado %}3.{% else %}4.{% endif %} Comunidad y Mejoras
+        </button>
+    </div>
+
+    <!-- MÓDULO 1: MAPA -->
+    <div id="tab-mapa" class="tab-content">
+        <div class="dashboard-grid">
+            <div class="glass-card">
+                <div class="telemetry-bar">
+                    <span>VISOR ORBITAL DE PARCELAS</span>
+                    <span id="coords-display">DIBUJA UN POLÍGONO O MARCA UN PUNTO</span>
+                </div>
+                <div id="map"></div>
+
+                <div style="margin: 12px 0;">
+                    <label style="font-size:11.5px; font-family:'JetBrains Mono',monospace; color:var(--nasa-cyan); display:block; margin-bottom:6px;">
+                        🎯 ¿QUÉ DESEAS EVALUAR EN ESTE TERRENO?
+                    </label>
+                    <select id="enfoque-terreno" class="input-dark" style="margin:0;">
+                        <option value="AUTO">🤖 Que la IA decida si es mejor Cultivo Agrícola o Ganadería (Pastos)</option>
+                        <option value="CULTIVOS">🌱 Solo Cultivos Agrícolas (Recomendar los mejores cultivos)</option>
+                        <option value="GANADERIA">🐄 Solo Ganadería (Recomendar pastos, forrajes y rotación)</option>
+                        <option value="MIXTO">🌾🐄 Sistema Mixto Silvopastoril (Cultivos + Pastos)</option>
+                    </select>
+                </div>
+
+                <button id="btn-analizar-terreno" class="btn-nasa" onclick="analizarTerreno()" disabled>
+                    <i class="fa-solid fa-satellite"></i> Consultar Telemetría Satelital y Recomendar
+                </button>
+            </div>
+            <div class="glass-card">
+                <div class="telemetry-bar">
+                    <span>REPORTE AGROCLIMÁTICO & PLAN DE SIEMBRA</span>
+                    <span>POWER · SMAP · GPM · SRTM</span>
+                </div>
+                <div id="resultado-terreno">
+                    <p style="color:var(--text-muted); text-align:center; padding:50px 15px;">
+                        Usa el pentágono o rectángulo a la izquierda del mapa para delimitar tu terreno, elige el enfoque y genera el Plan de Siembra con IA.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MÓDULO 2: ESCÁNER UNIVERSAL -->
+    <div id="tab-escaner" class="tab-content hidden">
+        <div class="dashboard-grid">
+            <div class="glass-card">
+                <div class="telemetry-bar">
+                    <span>CLASIFICADOR FITOSANITARIO UNIVERSAL</span>
+                    <span>CUALQUIER ESPECIE VEGETAL</span>
+                </div>
+                <p style="font-size:14px; color:var(--text-muted);">
+                    Sube o captura la fotografía de cualquier hoja, cultivo, frutal, pasto o planta. La IA identificará automáticamente su especie (nombre común y científico), marcará las lesiones en rojo y creará su Plan de Recuperación.
+                </p>
+                <label for="input-hoja" class="upload-zone">
+                    <i class="fa-solid fa-camera" style="font-size:32px; color:var(--nasa-cyan); margin-bottom:8px;"></i>
+                    <h4>Seleccionar o Capturar Fotografía de la Planta u Hoja</h4>
+                    <input type="file" id="input-hoja" accept="image/*" capture="environment" style="display:none;" onchange="previsualizarHoja(this)">
+                    <div><img id="preview-hoja" class="hidden" alt="Vista previa"></div>
+                </label>
+                <button class="btn-nasa btn-red" onclick="escanearHoja()">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> Identificar Planta y Generar Plan de Recuperación
+                </button>
+            </div>
+            <div class="glass-card">
+                <div class="telemetry-bar">
+                    <span>DIAGNÓSTICO BOTÁNICO Y RECUPERACIÓN</span>
+                    <span>FITOPATOLOGÍA IA</span>
+                </div>
+                <div id="resultado-escaner">
+                    <p style="color:var(--text-muted); text-align:center; padding:50px 15px;">
+                        Esperando fotografía de la hoja o planta para identificar la especie y trazar el Plan de Recuperación.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MÓDULO 3: HISTORIAL (OCULTO PARA INVITADOS) -->
+    {% if not es_invitado %}
+    <div id="tab-historial" class="tab-content hidden">
+        <div class="glass-card" style="margin-bottom:20px;">
+            <div class="telemetry-bar"><span>PLANES DE SIEMBRA GUARDADOS</span></div>
+            <div id="lista-planes-siembra">Cargando...</div>
+        </div>
+        <div class="glass-card" style="margin-bottom:20px;">
+            <div class="telemetry-bar"><span>HISTORIAL DE ESCANEOS Y RECUPERACIÓN</span></div>
+            <div id="lista-escaneos">Cargando...</div>
+        </div>
+        <div class="glass-card">
+            <div class="telemetry-bar"><span>HISTORIAL DE CONSULTAS SATELITALES</span></div>
+            <div id="lista-consultas">Cargando...</div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- MÓDULO COMUNIDAD Y MEJORAS -->
+    <div id="tab-comunidad" class="tab-content hidden">
+        <div class="dashboard-grid">
+            <div class="glass-card">
+                <div class="telemetry-bar"><span>PUBLICAR COMENTARIO O MEJORA DEL PROYECTO</span></div>
+                <label style="font-size:12px; color:var(--text-muted);">Módulo a evaluar</label>
+                <select id="com-modulo" class="input-dark">
+                    <option value="GENERAL">Propuesta General GeoSync</option>
+                    <option value="MAPA_NASA">Mapa Satelital y Datos NASA</option>
+                    <option value="PLAN_SIEMBRA">Recomendación y Plan de Siembra</option>
+                    <option value="ESCANER_HOJAS">Escáner Experto de Hojas</option>
+                </select>
+
+                <label style="font-size:12px; color:var(--text-muted);">Calificación (1 a 5 estrellas)</label>
+                <input type="number" id="com-calificacion" min="1" max="5" value="5" class="input-dark">
+
+                <label style="font-size:12px; color:var(--text-muted);">Tu comentario o sugerencia</label>
+                <textarea id="com-mensaje" rows="4" class="input-dark" placeholder="Escribe tus sugerencias para mejorar GeoSync..."></textarea>
+
+                <button class="btn-nasa" onclick="enviarComentario()">
+                    <i class="fa-solid fa-paper-plane"></i> Publicar Comentario
+                </button>
+            </div>
+            <div class="glass-card">
+                <div class="telemetry-bar"><span>MURO DE RETROALIMENTACIÓN</span></div>
+                <div id="lista-comentarios">Cargando comentarios...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<footer class="ai-footer">
+    <strong>Transparencia de Inteligencia Sintética (IS/IA) y Datos Abiertos:</strong> GeoSync FieldShift utiliza datos agroclimáticos abiertos de la NASA (POWER, SMAP, GPM, SRTM), cartografía de OpenStreetMap y modelos de lenguaje/visión en tiempo real (Groq LLM) identificados mediante marcas de agua en cada diagnóstico. Este proyecto es independiente y no representa un logotipo ni respaldo comercial de la NASA.
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+<script>
+    const ES_INVITADO = {{ es_invitado|yesno:"true,false" }};
+    let latActual = null, lonActual = null, areaHectareas = 1.0;
+    let poligonoCoords = [];
+    let consultaActualId = null, recomendacionesActuales = [];
+
+    function mostrarNotificacion(mensaje) {
+        const toast = document.getElementById('nasa-toast');
+        toast.innerHTML = `<i class="fa-solid fa-circle-check" style="color:var(--nasa-green); margin-right:8px;"></i> ${mensaje}`;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 3500);
+    }
+
+    function mostrarLoaderPlanta(titulo = "PROCESANDO DATOS...", subtitulo = "Sincronizando con GeoSync") {
+        document.getElementById('loader-titulo').innerText = titulo;
+        document.getElementById('loader-subtitulo').innerText = subtitulo;
+        document.getElementById('geosync-loader').classList.add('active');
+    }
+
+    function ocultarLoaderPlanta() {
+        document.getElementById('geosync-loader').classList.remove('active');
+    }
+
+    window.addEventListener('load', () => {
+        mostrarLoaderPlanta("BIENVENIDO A GEOSYNC", "Iniciando telemetría orbital y modelos agronómicos...");
+        setTimeout(ocultarLoaderPlanta, 850);
+    });
+
+    const sateliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+    const etiquetasLayer = L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}');
+    const map = L.map('map', { center: [2.7098, -75.0958], zoom: 13, layers: [sateliteLayer, etiquetasLayer] });
+
+    const lotesDibujados = new L.FeatureGroup();
+    map.addLayer(lotesDibujados);
+
+    const drawControl = new L.Control.Draw({
+        position: 'topleft',
+        draw: {
+            polygon: {
+                allowIntersection: false,
+                showArea: true,
+                shapeOptions: { color: '#00e5ff', fillColor: '#00e5ff', fillOpacity: 0.28, weight: 3 }
+            },
+            rectangle: {
+                shapeOptions: { color: '#10b981', fillColor: '#10b981', fillOpacity: 0.28, weight: 3 }
+            },
+            polyline: false,
+            circle: false,
+            circlemarker: false,
+            marker: true
+        },
+        edit: {
+            featureGroup: lotesDibujados,
+            remove: true
+        }
+    });
+    map.addControl(drawControl);
+
+    map.on(L.Draw.Event.CREATED, function (event) {
+        lotesDibujados.clearLayers();
+        const layer = event.layer;
+        lotesDibujados.addLayer(layer);
+
+        if (event.layerType === 'polygon' || event.layerType === 'rectangle') {
+            const geojson = layer.toGeoJSON();
+            const areaM2 = turf.area(geojson);
+            areaHectareas = (areaM2 / 10000).toFixed(2);
+            const centro = turf.centroid(geojson).geometry.coordinates;
+            lonActual = centro[0];
+            latActual = centro[1];
+            poligonoCoords = geojson.geometry.coordinates[0];
+
+            layer.bindPopup(`<b>📐 Lote Delimitado</b><br>Área: <b>${areaHectareas} ha</b> (${Math.round(areaM2)} m²)`).openPopup();
+            document.getElementById('coords-display').innerText =
+                `ÁREA: ${areaHectareas} HA | CENTRO: ${latActual.toFixed(4)}, ${lonActual.toFixed(4)}`;
+        } else if (event.layerType === 'marker') {
+            const pos = layer.getLatLng();
+            latActual = pos.lat;
+            lonActual = pos.lng;
+            areaHectareas = 1.0;
+            poligonoCoords = [[lonActual, latActual]];
+            document.getElementById('coords-display').innerText =
+                `PUNTO (1 HA REF) | LAT: ${latActual.toFixed(4)} | LON: ${lonActual.toFixed(4)}`;
+        }
+        document.getElementById('btn-analizar-terreno').disabled = false;
+    });
+
+    function mostrarTab(tabId, btn) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+        document.querySelectorAll('.nav-pill').forEach(el => el.classList.remove('active'));
+        document.getElementById(tabId).classList.remove('hidden');
+        btn.classList.add('active');
+        if (tabId === 'tab-mapa') setTimeout(() => map.invalidateSize(), 200);
+    }
+
+    function previsualizarHoja(input) {
+        const preview = document.getElementById('preview-hoja');
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = e => { preview.src = e.target.result; preview.classList.remove('hidden'); };
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    async function analizarTerreno() {
+        const contenedor = document.getElementById('resultado-terreno');
+        const enfoqueElegido = document.getElementById('enfoque-terreno').value;
+
+        mostrarLoaderPlanta(
+            `ANALIZANDO LOTE DE ${areaHectareas} HA...`,
+            "Verificando Parques Naturales, Ríos, Distancia al Mar y Datos NASA"
+        );
+        try {
+            const resp = await fetch('/api/terreno/analizar/', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    lat: latActual,
+                    lon: lonActual,
+                    area_hectareas: areaHectareas,
+                    poligono: poligonoCoords,
+                    enfoque: enfoqueElegido
+                })
+            });
+            const data = await resp.json();
+            if (data.error) {
+                contenedor.innerHTML = `<div class="alert-error">${data.error}</div>`;
+                return;
+            }
+
+            const tele = data.datos_nasa.telemetria_satelital || {};
+            const costa = data.datos_nasa.analisis_costero || {};
+            const entorno = data.datos_nasa.entorno_hidrico_ambiental || {};
+
+            if (data.es_apto === false) {
+                contenedor.innerHTML = `
+                    <div class="alert-error" style="border: 2px solid #fc3d21; background: rgba(252, 61, 33, 0.22); padding: 20px;">
+                        <h3 style="color: #ffffff; margin-bottom: 10px;">
+                            🚫 TERRENO NO APTO — ZONA PROTEGIDA / RESERVA
+                        </h3>
+                        <p style="font-size: 14px; line-height: 1.6; color: #ffe4e1;">
+                            ${data.motivo_no_apto}
+                        </p>
+                        <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.2); font-size: 12.5px;">
+                            <b>🏞️ Río cercano:</b> ${entorno.rio_mas_cercano || 'N/A'} &nbsp;|&nbsp;
+                            <b>🌊 Distancia al mar:</b> ${costa.distancia_mar_km ?? '--'} km (${costa.costa_referencia || ''})
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            consultaActualId = data.consulta_id;
+            recomendacionesActuales = data.recomendaciones || [];
+            const colorMotor = data.generado_por_ia ? 'var(--nasa-green)' : 'var(--nasa-amber)';
+
+            let html = `
+                <div class="engine-banner" style="border-left: 4px solid ${colorMotor};">
+                    <span>MARCA DE AGUA IA / MOTOR:</span>
+                    <strong style="color: ${colorMotor};">${data.fuente_motor}</strong>
+                </div>
+
+                <div class="metrics-grid">
+                    <div class="metric-box"><small>ÁREA DEL LOTE</small><strong>${areaHectareas} ha</strong></div>
+                    <div class="metric-box"><small>TEMP (POWER)</small><strong>${tele.temperatura_promedio_c ?? '--'} °C</strong></div>
+                    <div class="metric-box"><small>LLUVIA (GPM)</small><strong>${tele.precipitacion_diaria_mm_gpm ?? '--'} mm</strong></div>
+                    <div class="metric-box"><small>SUELO (SMAP)</small><strong>${tele.humedad_suelo_radicular_smap ?? '--'}</strong></div>
+                    <div class="metric-box"><small>ALTITUD (SRTM)</small><strong>${data.datos_nasa.topografia_srtm_msnm} m</strong></div>
+                    <div class="metric-box"><small>🌊 DISTANCIA AL MAR</small><strong>${costa.distancia_mar_km ?? '--'} km</strong></div>
+                    <div class="metric-box" style="grid-column: span 2;"><small>🏞️ RÍO / FUENTE HÍDRICA</small><strong style="font-size:14px;">${entorno.rio_mas_cercano || 'No detectado'}</strong></div>
+                    <div class="metric-box"><small>🛡️ RESERVA / PARQUE</small><strong style="color:var(--nasa-green); font-size:14px;">✅ APTO (Fuera de Reserva)</strong></div>
+                </div>
+
+                <div class="step-box" style="margin-bottom: 14px; border-left-color: var(--nasa-green); background: rgba(16, 185, 129, 0.14);">
+                    <b>🐄🌾 Veredicto de Vocación del Suelo (${data.vocacion_terreno || 'Agropecuaria'}):</b><br>
+                    <span>${data.justificacion_vocacion || 'Aptitud evaluada según cercanía a ríos, distancia al mar y humedad SMAP.'}</span>
+                </div>
+            `;
+
+            recomendacionesActuales.forEach((cultivo, idx) => {
+                let esGanaderia = (cultivo.tipo_recomendacion === 'GANADERIA_PASTOS' || cultivo.nombre.toLowerCase().includes('pasto') || cultivo.nombre.toLowerCase().includes('ganad'));
+                let icono = esGanaderia ? '🐄🌿' : '🌱';
+                let etapasHtml = (cultivo.plan_siembra_semanal || []).map(et =>
+                    `<div class="step-box"><b>${et.etapa}:</b> ${et.tareas}</div>`
+                ).join('');
+
+                let botonGuardarHtml = ES_INVITADO
+                    ? `<a href="{% url 'acceso' %}" class="btn-nasa" style="margin-top:12px; padding:10px; display:block; text-align:center; text-decoration:none; background:rgba(255,255,255,0.12);">
+                           🔒 Inicia Sesión para Guardar este Plan en tu Historial
+                       </a>`
+                    : `<button class="btn-nasa" onclick="activarPlanSiembra(${idx})" style="margin-top:12px; padding:10px;">
+                           Guardar Plan (${areaHectareas} ha) para ${cultivo.nombre}
+                       </button>`;
+
+                html += `
+                    <div class="crop-card" style="border-left: 4px solid ${esGanaderia ? '#10b981' : '#00e5ff'};">
+                        <h4>${icono} ${cultivo.nombre} (${cultivo.aptitud_porcentaje}% Aptitud — ${areaHectareas} ha)</h4>
+                        <p style="font-size:13px; color:#e2e8f0; margin:8px 0; line-height:1.5;">
+                            <b>🛰️ ¿Por qué lo recomendamos (NASA + Ríos + Mar)?:</b> ${cultivo.justificacion_nasa}
+                        </p>
+                        ${cultivo.argumento_comparativo ? `
+                        <p style="font-size:13px; color:var(--nasa-cyan); margin:8px 0; line-height:1.5;">
+                            <b>⚖️ ¿Cultivo o Ganadería de Pastos?:</b> ${cultivo.argumento_comparativo}
+                        </p>` : ''}
+                        ${etapasHtml}
+                        <div style="margin-top:12px; padding:12px; background:rgba(252, 61, 33, 0.12); border:1px solid rgba(252, 61, 33, 0.45); border-radius:8px; font-size:12.5px; line-height:1.5;">
+                            <div style="color:#ffb4a8; font-weight:700; margin-bottom:4px;">
+                                🧪 Rango de pH Ideal del Suelo: <span style="color:var(--nasa-cyan);">${cultivo.ph_ideal || '5.5 a 6.5'}</span>
+                            </div>
+                            <div style="color:#cbd5e1;">
+                                <b>👨‍🌾 Validación con Expertos y Ronda Hídrica:</b> ${cultivo.aviso_experto || 'Se recomienda consultar con un ingeniero agrónomo o zootecnista y revisar el pH del suelo en laboratorio.'}
+                            </div>
+                        </div>
+                        ${botonGuardarHtml}
+                    </div>
+                `;
+            });
+            contenedor.innerHTML = html;
+        } finally {
+            ocultarLoaderPlanta();
+        }
+    }
+
+    async function activarPlanSiembra(index) {
+        if (ES_INVITADO) {
+            window.location.href = "{% url 'acceso' %}";
+            return;
+        }
+        const cultivo = recomendacionesActuales[index];
+        mostrarLoaderPlanta("GUARDANDO PLAN DE SIEMBRA...", `Registrando cronograma para ${cultivo.nombre}`);
+        try {
+            const resp = await fetch('/api/terreno/plan-siembra/', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    consulta_id: consultaActualId,
+                    cultivo_elegido: `${cultivo.nombre} (${areaHectareas} ha)`,
+                    etapas_json: cultivo.plan_siembra_semanal
+                })
+            });
+            const res = await resp.json();
+            mostrarNotificacion(res.mensaje || res.error || "Plan guardado.");
+        } finally {
+            ocultarLoaderPlanta();
+        }
+    }
+
+    async function escanearHoja() {
+        const fileInput = document.getElementById('input-hoja');
+        if (!fileInput.files.length) return mostrarNotificacion("Selecciona una fotografía de la hoja primero.");
+        const formData = new FormData();
+        formData.append('imagen', fileInput.files[0]);
+        const contenedor = document.getElementById('resultado-escaner');
+        mostrarLoaderPlanta("ESCANEANDO TEJIDO FOLIAR...", "Identificando especie y generando infografía fitosanitaria con IA");
+
+        try {
+            const resp = await fetch('/api/planta/escanear/', { method: 'POST', body: formData });
+            const data = await resp.json();
+            const colorMotor = data.generado_por_ia ? 'var(--nasa-green)' : 'var(--nasa-amber)';
+            let bannerMotor = `
+                <div class="engine-banner" style="border-left: 4px solid ${colorMotor};">
+                    <span>MARCA DE AGUA IA / DIAGNÓSTICO:</span>
+                    <strong style="color: ${colorMotor};">${data.fuente_motor}</strong>
+                </div>
+            `;
+
+            if (!data.reconocida_en_sistema) {
+                contenedor.innerHTML = bannerMotor + `
+                    <div class="alert-error">
+                        <h4>⚠️ Imagen No Válida</h4>
+                        <p style="margin-top:6px;">${data.mensaje}</p>
+                    </div>`;
+                return;
+            }
+
+            const ficha = data.ficha_experta || {};
+            const urlImg = data.imagen_anotada_url || data.imagen_original_url || '';
+            const listaManejo = (ficha.como_manejarlo || []).map(item =>
+                `<div style="display:flex; align-items:flex-start; gap:8px; margin-top:6px; font-size:13px; color:#e2e8f0;">
+                    <span style="color:#10b981; font-weight:bold;">✔</span>
+                    <span>${item}</span>
+                </div>`
+            ).join('');
+
+            let pasosHtml = (data.plan_recuperacion || []).map(p =>
+                `<div class="step-box"><b>Día ${p.dia} — ${p.tarea}:</b> ${p.tratamiento}</div>`
+            ).join('');
+
+            contenedor.innerHTML = bannerMotor + `
+                <div style="border-radius:14px; overflow:hidden; border:1px solid rgba(16,185,129,0.4); background:rgba(8,15,28,0.92);">
+                    <div style="background:linear-gradient(135deg, #1b4332 0%, #0b3d91 100%); padding:18px 20px; text-align:center; border-bottom:3px solid #f59e0b;">
+                        <div style="font-family:'Space Grotesk',sans-serif; font-size:21px; font-weight:700; color:#ffffff; text-transform:uppercase; letter-spacing:1px;">
+                            ${data.titulo_afeccion || 'DIAGNÓSTICO FITOSANITARIO'}
+                        </div>
+                        <div style="font-size:15px; font-weight:600; color:#fcd34d; margin-top:4px;">
+                            🌿 ${data.planta_detectada} — Severidad: ${data.severidad}
+                        </div>
+                    </div>
+
+                    ${urlImg ? `
+                    <div style="position:relative; padding:14px; background:#05070e;">
+                        <img src="${urlImg}" style="width:100%; border-radius:10px; border:2px solid #00e5ff; display:block;">
+                        <span style="position:absolute; top:24px; left:24px; background:rgba(252,61,33,0.92); color:#fff; padding:5px 12px; border-radius:20px; font-size:11.5px; font-weight:700;">
+                            🤖 IA VISIÓN: ${(data.zonas_dano || []).length} ZONA(S) CON LUPA DE INSPECCIÓN
+                        </span>
+                    </div>` : ''}
+
+                    <div style="padding:18px; display:grid; gap:12px;">
+                        <div class="crop-card" style="margin:0; border-left:4px solid #10b981;">
+                            <h4 style="color:#10b981; font-size:14px;">➊ ¿QUÉ ES?</h4>
+                            <p style="font-size:13px; color:#e2e8f0; margin-top:4px; line-height:1.5;">${ficha.que_es || data.diagnostico}</p>
+                        </div>
+
+                        <div class="crop-card" style="margin:0; border-left:4px solid #00e5ff;">
+                            <h4 style="color:#00e5ff; font-size:14px;">➋ ¿CÓMO SE RECONOCE?</h4>
+                            <p style="font-size:13px; color:#e2e8f0; margin-top:4px; line-height:1.5;">${ficha.como_se_reconoce || 'Lesiones visibles marcadas en los recuadros de inspección.'}</p>
+                        </div>
+
+                        <div class="crop-card" style="margin:0; border-left:4px solid #f59e0b;">
+                            <h4 style="color:#f59e0b; font-size:14px;">➌ ¿CUÁNDO APARECE?</h4>
+                            <p style="font-size:13px; color:#e2e8f0; margin-top:4px; line-height:1.5;">${ficha.cuando_aparece || 'Asociado a variaciones de humedad, temperatura o estrés nutricional.'}</p>
+                        </div>
+
+                        <div class="crop-card" style="margin:0; border-left:4px solid #fc3d21;">
+                            <h4 style="color:#ff6b52; font-size:14px;">➍ ¿DAÑOS?</h4>
+                            <p style="font-size:13px; color:#e2e8f0; margin-top:4px; line-height:1.5;">${ficha.danos || 'Disminuye la capacidad fotosintética y debilita el tejido foliar.'}</p>
+                        </div>
+
+                        <div class="crop-card" style="margin:0; border-left:4px solid #10b981;">
+                            <h4 style="color:#10b981; font-size:14px;">➎ ¿CÓMO MANEJARLO?</h4>
+                            <div style="margin-top:6px;">${listaManejo}</div>
+                        </div>
+
+                        <div style="margin-top:6px;">
+                            <h4 style="color:var(--nasa-cyan); font-size:14px; margin-bottom:6px;">📅 Cronograma de Recuperación Sugerido:</h4>
+                            ${pasosHtml}
+                        </div>
+                    </div>
+
+                    <div style="background:linear-gradient(90deg, #1b4332 0%, #143628 100%); padding:14px 18px; display:flex; align-items:center; gap:12px; border-top:1px solid rgba(255,255,255,0.15);">
+                        <span style="font-size:22px;">💡</span>
+                        <span style="font-size:13px; color:#fde68a; font-weight:600; line-height:1.4;">
+                            ${ficha.consejo_clave || 'La observación constante es la clave para proteger la sanidad de tu cultivo.'}
+                        </span>
+                    </div>
+                </div>
+            `;
+        } finally {
+            ocultarLoaderPlanta();
+        }
+    }
+
+    async function cargarHistorial() {
+        if (ES_INVITADO) return;
+        mostrarLoaderPlanta("CARGANDO BITÁCORA...", "Recuperando planes de siembra y diagnósticos");
+        try {
+            const resp = await fetch('/api/historial/');
+            const data = await resp.json();
+
+            document.getElementById('lista-planes-siembra').innerHTML = data.planes_siembra.length ? data.planes_siembra.map(p => `
+                <div class="crop-card"><h4>🌱 ${p.cultivo_elegido} (${p.fecha_inicio})</h4>
+                ${(p.etapas_json || []).map(e => `<div class="step-box"><b>${e.etapa}:</b> ${e.tareas}</div>`).join('')}</div>
+            `).join('') : "<p style='color:var(--text-muted);'>Sin planes de siembra aún.</p>";
+
+            document.getElementById('lista-escaneos').innerHTML = data.escaneos_planta.length ? data.escaneos_planta.map(e => `
+                <div class="crop-card">
+                    <div style="display:flex; justify-content:space-between;">
+                        <b>🍃 ${e.planta_detectada} (${e.fecha_escaneo})</b>
+                        <small style="color:${e.generado_por_ia ? 'var(--nasa-green)' : 'var(--nasa-amber)'};">${e.fuente_motor}</small>
+                    </div>
+                    <p style="font-size:13px; color:var(--text-muted); margin-top:6px;">${e.diagnostico_ia}</p>
+                </div>
+            `).join('') : "<p style='color:var(--text-muted);'>Sin escaneos registrados.</p>";
+
+            document.getElementById('lista-consultas').innerHTML = data.consultas_terreno.length ? data.consultas_terreno.map(c => `
+                <div class="step-box" style="display:flex; justify-content:space-between;">
+                    <span>📍 LAT ${c.latitud}, LON ${c.longitud} — ${c.fecha_consulta}</span>
+                    <strong style="color:${c.generado_por_ia ? 'var(--nasa-green)' : 'var(--nasa-amber)'};">${c.fuente_motor}</strong>
+                </div>
+            `).join('') : "<p style='color:var(--text-muted);'>Sin consultas registradas.</p>";
+        } finally {
+            ocultarLoaderPlanta();
+        }
+    }
+
+    async function cargarComentarios() {
+        const resp = await fetch('/api/comentarios/');
+        const data = await resp.json();
+        const cont = document.getElementById('lista-comentarios');
+        cont.innerHTML = data.comentarios.length ? data.comentarios.map(c => `
+            <div class="crop-card">
+                <div style="display:flex; justify-content:space-between;">
+                    <b>👤 ${c.usuario} <small style="color:var(--nasa-cyan);">(${c.modulo})</small></b>
+                    <span>${'⭐'.repeat(c.calificacion)}</span>
+                </div>
+                <p style="font-size:14px; margin:8px 0;">${c.mensaje}</p>
+                <small style="color:var(--text-muted);">${c.fecha}</small>
+            </div>
+        `).join('') : "<p style='color:var(--text-muted);'>Aún no hay comentarios publicados.</p>";
+    }
+
+    async function enviarComentario() {
+        const modulo = document.getElementById('com-modulo').value;
+        const calificacion = document.getElementById('com-calificacion').value;
+        const mensaje = document.getElementById('com-mensaje').value;
+        mostrarLoaderPlanta("PUBLICANDO COMENTARIO...", "Registrando aporte en la comunidad GeoSync");
+        try {
+            const resp = await fetch('/api/comentarios/', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({modulo, calificacion, mensaje})
+            });
+            const res = await resp.json();
+            document.getElementById('com-mensaje').value = '';
+            await cargarComentarios();
+            mostrarNotificacion(res.mensaje || res.error);
+        } finally {
+            ocultarLoaderPlanta();
+        }
+    }
+</script>
+<script type="text/javascript">
+    function googleTranslateElementInit() {
+        new google.translate.TranslateElement({
+            pageLanguage: 'es',
+            includedLanguages: 'en,es',
+            layout: google.translate.TranslateElement.InlineLayout.SIMPLE,
+            autoDisplay: false
+        }, 'google_translate_element');
+    }
+</script>
+<script type="text/javascript" src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+</body>
+</html>
